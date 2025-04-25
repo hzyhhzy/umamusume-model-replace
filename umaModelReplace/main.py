@@ -14,6 +14,47 @@ EDITED_PATH = f"{spath}/edited"
 class UmaFileNotFoundError(FileNotFoundError):
     pass
 
+def replace_raw(data: bytes, old: bytes, new: bytes, context: int = 20) -> bytes:
+    """
+    在 data 中将所有 old 替换为 new，并在每次替换时打印上下文。
+    
+    :param data: 原始字节串
+    :param old: 需要被替换的字节串
+    :param new: 替换成的字节串
+    :param context: 打印时，替换位置前后各保留多少字节上下文
+    :return: 完成所有替换后的新字节串
+    """
+
+    any_replaced=False
+    result = bytearray()
+    i = 0
+    while True:
+        idx = data.find(old, i)
+        if idx < 0:
+            # 无更多匹配，添加剩余部分
+            result.extend(data[i:])
+            break
+        any_replaced=True
+        # 计算上下文的起止位置
+        start = max(idx - context, 0)
+        end = min(idx + len(old) + context, len(data))
+
+        before = data[start:idx]
+        match = data[idx:idx + len(old)]
+        after = data[idx + len(old):end]
+
+        # 打印信息
+        #print(f"Match at byte offset {idx}:")
+        #print(f"  …{before!r}[{match!r}]{after!r}…")
+
+        # 构造结果
+        result.extend(data[i:idx])
+        result.extend(new)
+        i = idx + len(old)
+
+
+    #result=result.replace("chr1024_00/textures/tex_chr1024_00_cheek0".encode("utf8"), "chr9002_00/textures/tex_chr9002_00_cheek0".encode("utf8"))
+    return bytes(result),any_replaced
 
 class UmaReplace:
     def __init__(self):
@@ -53,46 +94,47 @@ class UmaReplace:
                 shutil.copyfile(fpath, self.get_bundle_path(i))
                 print(f"restore {i}")
 
+
     @staticmethod
     def replace_file_path(fname: str, id1: str, id2: str, save_name: t.Optional[str] = None) -> str:
         env = UnityPy.load(fname)
-
+        #print(fname)
         data = None
 
         for obj in env.objects:
-            if obj.type.name not in ["Avatar"]:
-                data = obj.read()
-                if hasattr(data, "name"):
-                    if id1 in data.name:
-                        # print(obj.type.name, data.name)
-                        if obj.type.name == "MonoBehaviour":
-                            raw = bytes(data.raw_data)
-                            raw = raw.replace(id1.encode("utf8"), id2.encode("utf8"))
-                            data.set_raw_data(raw)
-                            data.save(raw_data=raw)
-                        else:
-                            raw = bytes(data.get_raw_data())
-                            raw = raw.replace(id1.encode("utf8"), id2.encode("utf8"))
-                            data.set_raw_data(raw)
-                            data.save()
-
-                        # if obj.type.name == "Texture2D":
-                        #     mono_tree = obj.read_typetree()
-                        #     if "m_Name" in mono_tree:
-                        #         mono_tree["m_Name"] = mono_tree["m_Name"].replace(id1, id2)
-                        #         obj.save_typetree(mono_tree)
-
-                # mono_tree = obj.read_typetree()
-                # if "m_Name" in mono_tree:
-                #     mono_tree["m_Name"] = mono_tree["m_Name"].replace(id1, id2)
-                #     obj.save_typetree(mono_tree)
-
+            #if obj.type.name not in ["Avatar"]:
+            data = obj.read()
+            # print(obj.type.name, data.name)
+            if obj.type.name == "MonoBehaviour":
+                if(hasattr(data,"raw_data")):
+                    raw = bytes(data.raw_data)
+                    raw,changed = replace_raw(raw, old=id1.encode("utf8"), new=id2.encode("utf8"))
+                    data.set_raw_data(raw)
+                    data.save(raw_data=raw)
+                    #if(changed):
+                    #    print(data.m_Name)
+                else:
+                    raw = bytes(obj.get_raw_data())
+                    raw,changed = replace_raw(raw, old=id1.encode("utf8"), new=id2.encode("utf8"))
+                    obj.set_raw_data(raw)
+                    #if(changed):
+                    #    print(data.m_Name)
+                
+            else:
+                #print(obj.type.name)
+                raw = bytes(obj.get_raw_data())
+                raw,changed = replace_raw(raw, old=id1.encode("utf8"), new=id2.encode("utf8"))
+                obj.set_raw_data(raw)
+                #if(changed):
+                #    print(data.m_Name)
+                #obj.save()
+        
         if save_name is None:
             save_name = f"{EDITED_PATH}/{os.path.split(fname)[-1]}"
         if data is None:
             with open(fname, "rb") as f:
                 data = f.read()
-                data = data.replace(id1.encode("utf8"), id2.encode("utf8"))
+                data,changed = replace_raw(data, old=id1.encode("utf8"), new=id2.encode("utf8"))
             with open(save_name, "wb") as f:
                 f.write(data)
         else:
@@ -111,10 +153,9 @@ class UmaReplace:
         for obj in env.objects:
             if obj.type.name == "Texture2D":
                 data = obj.read()
-                if hasattr(data, "name"):
-                    if f"{data.name}.png" in file_names:
-                        img_data = data.read()
-                        img_data.image = Image.open(f"{edited_path}/{data.name}.png")
+                if hasattr(data, "m_Name"):
+                    if f"{data.m_Name}.png" in file_names:
+                        data.image = Image.open(f"{edited_path}/{data.m_Name}.png")
                         data.save()
 
         save_name = f"{EDITED_PATH}/{os.path.split(bundle_name)[-1]}"
@@ -135,12 +176,13 @@ class UmaReplace:
         for obj in env.objects:
             if obj.type.name == "Texture2D":
                 data = obj.read()
-                if hasattr(data, "name"):
-                    if src_names is None or (data.name in src_names):
-                        img_data = data.read()
-                        image: Image = img_data.image
-                        image.save(f"{base_path}/{data.name}.png")
-                        print(f"save {data.name} into {f'{base_path}/{data.name}.png'}")
+                if hasattr(data, "m_Name"):
+                    if src_names is None or (data.m_Name in src_names):
+                        #img_data = data.get_image_data()
+                        #image: Image = img_data.image
+                        image = data.image
+                        image.save(f"{base_path}/{data.m_Name}.png")
+                        print(f"save {data.m_Name} into {f'{base_path}/{data.m_Name}.png'}")
         return True, base_path
 
     def get_bundle_hash(self, path: str, query_orig_id: t.Optional[str]) -> str:
@@ -179,6 +221,7 @@ class UmaReplace:
 
     def replace_char_body_texture(self, char_id: str):
         mtl_bdy_path = assets_path.get_body_mtl_path(char_id)
+        print(mtl_bdy_path)
         bundle_hash = self.get_bundle_hash(mtl_bdy_path, None)
         self.file_backup(bundle_hash)
         edited_path = self.replace_texture2d(bundle_hash)

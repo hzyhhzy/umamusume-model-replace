@@ -2,6 +2,8 @@ import umaModelReplace
 
 uma = umaModelReplace.UmaReplace()
 
+debug_auto=True
+debug_auto=False
 
 def replace_char_body_texture(char_id: str):
     is_not_exist, msg = uma.save_char_body_texture(char_id, False)
@@ -41,7 +43,8 @@ def replace_char_head_texture(char_id: str):
 
 if __name__ == "__main__":
     while True:
-        do_type = input("[1] 更换头部模型\n"
+        
+        do_type = "1" if debug_auto else input("[1] 更换头部模型\n"
                         "[2] 更换身体模型\n"
                         "[3] 更换尾巴模型(不建议)\n"
                         "[4] 更换头部与身体模型\n"
@@ -58,12 +61,18 @@ if __name__ == "__main__":
 
         if do_type == "1":
             print("请输入7位数ID, 例: 1046_01")
-            uma.replace_head(input("替换ID: "), input("目标ID: "))
+            if(debug_auto):
+                uma.replace_head("1024_00", "9002_00")
+            else:
+                uma.replace_head(input("替换ID: "), input("目标ID: "))
             print("替换完成")
 
         if do_type == "2":
             print("请输入7位数ID, 例: 1046_01")
-            uma.replace_body(input("替换ID: "), input("目标ID: "))
+            if(debug_auto):
+                uma.replace_body("1024_00", "9002_00")
+            else:
+                uma.replace_body(input("替换ID: "), input("目标ID: "))
             print("替换完成")
 
         if do_type == "3":
