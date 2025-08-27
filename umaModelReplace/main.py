@@ -4,7 +4,11 @@ import os
 import shutil
 import typing as t
 from PIL import Image
-from . import assets_path
+
+if __name__ == '__main__':
+    import assets_path
+else:
+    from . import assets_path
 
 spath = os.path.split(__file__)[0]
 BACKUP_PATH = f"{spath}/backup"
@@ -14,7 +18,7 @@ EDITED_PATH = f"{spath}/edited"
 class UmaFileNotFoundError(FileNotFoundError):
     pass
 
-def replace_raw(data: bytes, old: bytes, new: bytes, context: int = 20) -> bytes:
+def replace_raw1(data: bytes, old: bytes, new: bytes, context: int = 20) -> bytes:
     """
     在 data 中将所有 old 替换为 new，并在每次替换时打印上下文。
     
@@ -42,19 +46,112 @@ def replace_raw(data: bytes, old: bytes, new: bytes, context: int = 20) -> bytes
         before = data[start:idx]
         match = data[idx:idx + len(old)]
         after = data[idx + len(old):end]
+        match2 = data[max(0,idx-30):min(idx + len(old)+30,len(data))]
+
+
 
         # 打印信息
         #print(f"Match at byte offset {idx}:")
         #print(f"  …{before!r}[{match!r}]{after!r}…")
+        print(f"{match2}")
+
 
         # 构造结果
         result.extend(data[i:idx])
         result.extend(new)
         i = idx + len(old)
+    if(any_replaced):
+        print("replaced")
 
 
     #result=result.replace("chr1024_00/textures/tex_chr1024_00_cheek0".encode("utf8"), "chr9002_00/textures/tex_chr9002_00_cheek0".encode("utf8"))
     return bytes(result),any_replaced
+
+def replace_raw(data: bytes, old:  bytes, new:  bytes, context: int = 20, cab_mapping: dict = None) -> tuple[bytes, bool]:
+    """
+    在 data 中匹配特定模式并替换ID，只替换指定的模式，其他地方不变。
+    
+    :param data: 原始字节串
+    :param old: 原始ID字节串，例如 b"9002_00"
+    :param new: 新ID字节串，例如 b"1024_00"
+    :param context: 打印时，替换位置前后各保留多少字节上下文
+    :param cab_mapping: CAB序号映射字典，格式为 {orig_cab: new_cab}
+    :return: (完成所有替换后的新字节串, 是否有替换发生)
+    """
+    import re
+    
+    any_replaced = False
+    result = data
+    
+    # 定义需要匹配的模式列表
+    patterns = [
+        # 模式1: \x00pfb_bdy{id}\x00
+        b'\x00pfb_bdy' + old + b'\x00',
+        # 模式2: /bdy{id}/pfb_bdy{id}
+        b'/bdy' + old + b'/pfb_bdy' + old,
+        # 未来可以在这里添加更多模式
+        b'/chr' + old + b'/pfb_chr' + old,
+        b'\x00tex_chr' + old + b'_cheek1\x00',
+        b'\x00ast_chr' + old + b'_ear_target\x00',
+        b'\x00ast_chr' + old + b'_facial_target',
+        b'\x00pfb_chr' + old + b'\x00',
+        b'\x00mtl_chr' + old,
+    ]
+    
+    # 对应的替换模式
+    replacements = [
+        # 替换1: \x00pfb_bdy{new_id}\x00
+        b'\x00pfb_bdy' + new + b'\x00',
+        # 替换2: /bdy{new_id}/pfb_bdy{new_id}
+        b'/bdy' + new + b'/pfb_bdy' + new,
+        # 替换3: \x00tex_chr{new_id}_cheek1\x00
+        b'/chr' + new + b'/pfb_chr' + new,
+        b'\x00tex_chr' + new + b'_cheek1\x00',
+        b'\x00ast_chr' + new + b'_ear_target\x00',
+        b'\x00ast_chr' + new + b'_facial_target',
+        b'\x00pfb_chr' + new + b'\x00',
+        b'\x00mtl_chr' + new,
+
+    ]
+    
+    # 逐个处理每个模式
+    for pattern, replacement in zip(patterns, replacements):
+        #print(pattern,replacement)
+        if pattern in result:
+            # 找到所有匹配位置用于调试输出
+            matches = []
+            start = 0
+            while True:
+                idx = result.find(pattern, start)
+                if idx == -1:
+                    break
+                matches.append(idx)
+                start = idx + 1
+            
+            if matches:
+                any_replaced = True
+                # 输出调试信息
+                for idx in matches:
+                    start_ctx = max(0, idx - context)
+                    end_ctx = min(len(result), idx + len(pattern) + context)
+                    match_context = result[start_ctx:end_ctx]
+                    #print(f"Pattern match at offset {idx}: {match_context}")
+                
+                # 执行替换
+                result = result.replace(pattern, replacement)
+                #print(f"Replaced pattern: {pattern} -> {replacement}")
+    
+    # 如果提供了CAB映射，则进行CAB序号替换
+    if cab_mapping:
+        for orig_cab, new_cab in cab_mapping.items():
+            orig_cab_bytes = orig_cab.encode('utf-8')
+            new_cab_bytes = new_cab.encode('utf-8')
+            if orig_cab_bytes in result:
+                result = result.replace(orig_cab_bytes, new_cab_bytes)
+                any_replaced = True
+                #print(f"CAB替换: {orig_cab} -> {new_cab}")
+    
+    return result, any_replaced
 
 class UmaReplace:
     def __init__(self):
@@ -95,9 +192,77 @@ class UmaReplace:
                 print(f"restore {i}")
 
 
+    def get_cab_mapping(self, orig_paths: list, new_paths: list, id_orig: str = None, id_new: str = None) -> dict:
+        """
+        获取orig_paths与new_paths的cab序号映射
+        
+        :param orig_paths: 原始逻辑路径列表
+        :param new_paths: 新逻辑路径列表
+        :param id_orig: 原始ID，用于hash查找
+        :param id_new: 新ID，用于hash查找
+        :return: {orig_cab: new_cab} 的映射字典
+        """
+        mapping = {}
+        
+        for orig_path, new_path in zip(orig_paths, new_paths):
+            try:
+                # 将逻辑路径转换为实际文件路径
+                orig_hash = self.get_bundle_hash(orig_path, id_orig)
+                new_hash = self.get_bundle_hash(new_path, id_new)
+                orig_file_path = self.get_bundle_path(orig_hash)
+                new_file_path = self.get_bundle_path(new_hash)
+                
+                # 加载原始文件获取cab序号
+                orig_env = UnityPy.load(orig_file_path)
+                orig_cabs = list(orig_env.cabs.keys())
+                
+                # 加载新文件获取cab序号
+                new_env = UnityPy.load(new_file_path)
+                new_cabs = list(new_env.cabs.keys())
+            except Exception as e:
+                print(f"跳过文件 {orig_path} -> {new_path}: {e}")
+                continue
+            
+            # 断言验证cab序号的数量和格式
+            assert len(orig_cabs) in [1, 2], f"原始文件 {orig_path} 的cab数量应该是1或2，实际是 {len(orig_cabs)}"
+            assert len(new_cabs) in [1, 2], f"新文件 {new_path} 的cab数量应该是1或2，实际是 {len(new_cabs)}"
+            
+            # 获取较短的cab序号（不带.ress后缀的）
+            def get_main_cab(cabs):
+                if len(cabs) == 1:
+                    cab = cabs[0]
+                else:
+                    # 找到较短的那个（不带.ress后缀）
+                    shorter = min(cabs, key=len)
+                    longer = max(cabs, key=len)
+                    assert longer == shorter + ".ress", f"两个cab序号应该是主序号和主序号+.ress的关系，实际是 {shorter} 和 {longer}"
+                    cab = shorter
+                
+                # 去掉"cab-"前缀
+                if cab.startswith("cab-"):
+                    return cab[4:]  # 去掉"cab-"前缀
+                else:
+                    assert False
+                return cab
+            
+            orig_main_cab = get_main_cab(orig_cabs)
+            new_main_cab = get_main_cab(new_cabs)
+            
+            #mapping[orig_main_cab] = new_main_cab
+            #print(f"路径 {orig_path} -> {new_path}: CAB映射 {orig_main_cab} -> {new_main_cab}")
+            mapping[new_main_cab] = orig_main_cab
+            print(f"CAB映射 {new_main_cab} -> {orig_main_cab}")
+        
+        return mapping
+
     @staticmethod
-    def replace_file_path(fname: str, id1: str, id2: str, save_name: t.Optional[str] = None) -> str:
+    def replace_file_path(fname: str, id1: str, id2: str, save_name: t.Optional[str] = None, cab_mapping: dict = None) -> str:
+        # 获取CAB序号
         env = UnityPy.load(fname)
+        #print(f"CAB序号: {env.cabs.keys()}")
+        
+        # CAB替换将在文件保存时统一处理
+        
         #print(fname)
         data = None
 
@@ -108,14 +273,16 @@ class UmaReplace:
             if obj.type.name == "MonoBehaviour":
                 if(hasattr(data,"raw_data")):
                     raw = bytes(data.raw_data)
-                    raw,changed = replace_raw(raw, old=id1.encode("utf8"), new=id2.encode("utf8"))
+                    raw,changed = replace_raw(raw, old=id1.encode("utf8"), new=id2.encode("utf8"), cab_mapping=cab_mapping)
+
                     data.set_raw_data(raw)
                     data.save(raw_data=raw)
                     #if(changed):
                     #    print(data.m_Name)
                 else:
                     raw = bytes(obj.get_raw_data())
-                    raw,changed = replace_raw(raw, old=id1.encode("utf8"), new=id2.encode("utf8"))
+                    raw,changed = replace_raw(raw, old=id1.encode("utf8"), new=id2.encode("utf8"), cab_mapping=cab_mapping)
+
                     obj.set_raw_data(raw)
                     #if(changed):
                     #    print(data.m_Name)
@@ -123,7 +290,7 @@ class UmaReplace:
             else:
                 #print(obj.type.name)
                 raw = bytes(obj.get_raw_data())
-                raw,changed = replace_raw(raw, old=id1.encode("utf8"), new=id2.encode("utf8"))
+                raw,changed = replace_raw(raw, old=id1.encode("utf8"), new=id2.encode("utf8"), cab_mapping=cab_mapping)
                 obj.set_raw_data(raw)
                 #if(changed):
                 #    print(data.m_Name)
@@ -134,12 +301,22 @@ class UmaReplace:
         if data is None:
             with open(fname, "rb") as f:
                 data = f.read()
-                data,changed = replace_raw(data, old=id1.encode("utf8"), new=id2.encode("utf8"))
+                data,changed = replace_raw(data, old=id1.encode("utf8"), new=id2.encode("utf8"), cab_mapping=cab_mapping)
+
             with open(save_name, "wb") as f:
                 f.write(data)
         else:
             with open(save_name, "wb") as f:
-                f.write(env.file.save())
+                file_data = env.file.save()
+                # 如果提供了CAB映射，则在文件数据中进行CAB替换
+                if cab_mapping:
+                    for orig_cab, new_cab in cab_mapping.items():
+                        orig_cab_bytes = orig_cab.encode('utf-8')
+                        new_cab_bytes = new_cab.encode('utf-8')
+                        if orig_cab_bytes in file_data:
+                            file_data = file_data.replace(orig_cab_bytes, new_cab_bytes)
+                            #print(f"文件级CAB替换: {orig_cab} -> {new_cab}")
+                f.write(file_data)
         return save_name
 
     def replace_texture2d(self, bundle_name: str):
@@ -236,12 +413,12 @@ class UmaReplace:
             # print("save", edited_path)
             shutil.copyfile(edited_path, self.get_bundle_path(bundle_hash))
 
-    def replace_file_ids(self, orig_path: str, new_path: str, id_orig: str, id_new: str):
+    def replace_file_ids(self, orig_path: str, new_path: str, id_orig: str, id_new: str, cab_mapping: dict = None):
         orig_hash = self.get_bundle_hash(orig_path, id_orig)
         new_hash = self.get_bundle_hash(new_path, id_new)
         self.file_backup(orig_hash)
         edt_bundle_file_path = self.replace_file_path(self.get_bundle_path(new_hash), id_new, id_orig,
-                                                      f"{EDITED_PATH}/{orig_hash}")
+                                                      f"{EDITED_PATH}/{orig_hash}", cab_mapping=cab_mapping)
         shutil.copyfile(edt_bundle_file_path, self.get_bundle_path(orig_hash))
 
     def replace_body(self, id_orig: str, id_new: str):
@@ -252,9 +429,17 @@ class UmaReplace:
         """
         orig_paths = assets_path.get_body_path(id_orig)
         new_paths = assets_path.get_body_path(id_new)
+        
+        # 获取CAB序号映射
+        try:
+            cab_mapping = self.get_cab_mapping(orig_paths, new_paths, id_orig, id_new)
+            #print(f"Body替换CAB映射: {cab_mapping}")
+        except Exception as e:
+            print(f"获取Body CAB映射失败: {e}")
+        
         for i in range(len(orig_paths)):
             try:
-                self.replace_file_ids(orig_paths[i], new_paths[i], id_orig, id_new)
+                self.replace_file_ids(orig_paths[i], new_paths[i], id_orig, id_new, cab_mapping)
             except UmaFileNotFoundError as e:
                 print(e)
 
@@ -266,9 +451,17 @@ class UmaReplace:
         """
         orig_paths = assets_path.get_head_path(id_orig)
         new_paths = assets_path.get_head_path(id_new)
+        
+        # 获取CAB序号映射
+        try:
+            cab_mapping = self.get_cab_mapping(orig_paths, new_paths, id_orig, id_new)
+            #print(f"Head替换CAB映射: {cab_mapping}")
+        except Exception as e:
+            print(f"获取Head CAB映射失败: {e}")
+        
         for i in range(len(orig_paths)):
             try:
-                self.replace_file_ids(orig_paths[i], new_paths[i], id_orig, id_new)
+                self.replace_file_ids(orig_paths[i], new_paths[i], id_orig, id_new, cab_mapping)
             except UmaFileNotFoundError as e:
                 print(e)
 
@@ -317,9 +510,17 @@ class UmaReplace:
             print(f"{id_orig} 模型编号: {use_id1}, {id_new} 模型编号: {use_id2}, 目前无法跨模型修改尾巴。")
             return
         print("注意, 更换尾巴后, 更换目标不能和原马娘同时出场。")
+        
+        # 获取CAB序号映射
+        try:
+            cab_mapping = self.get_cab_mapping(orig_paths, new_paths, id_orig, id_new)
+            #print(f"Tail替换CAB映射: {cab_mapping}")
+        except Exception as e:
+            print(f"获取Tail CAB映射失败: {e}")
+        
         for i in range(len(orig_paths)):
             try:
-                self.replace_file_ids(orig_paths[i], new_paths[i], id_orig, id_new)
+                self.replace_file_ids(orig_paths[i], new_paths[i], id_orig, id_new, cab_mapping)
             except UmaFileNotFoundError as e:
                 print(e)
 
@@ -557,11 +758,11 @@ class UmaReplace:
 
         print("done.")
 
-# a = UmaReplace()
-# a.file_backup("6NX7AYDRVFFGWKVGA4TDKUX2N63TRWRT")
-# a.replace_file_path("5IU2HDJHXDO3ISZSXXOQWXF7VEOG5OCX", "1046", "")
-# a.replace_body("1046_02", "1098_00")
-
-# a.replace_head("1046_02", "1098_00")
-# a.replace_tail("1046", "1037")
-# a.file_restore()
+if __name__ == '__main__':
+    # 测试代码，仅在直接运行此文件时执行
+    a = UmaReplace()
+    a.file_restore()
+    for i in range(1001, 1135):
+        a.replace_body(f"{i}_00", "9002_00")
+        a.replace_head(f"{i}_00", "9002_00")
+    pass

@@ -27,10 +27,13 @@ def get_head_path(_id):
         f"sourceresources/3d/chara/head/chr{_id}/materials/mtl_chr{_id}_hair",
         f"sourceresources/3d/chara/head/chr{_id}/materials/mtl_chr{_id}_mayu",
         f"sourceresources/3d/chara/head/chr{_id}/materials/mtl_chr{_id}_tear",
-        f"sourceresources/3d/chara/head/chr{_id}/texture/tex_chr{_id}_cheek0",
         f"sourceresources/3d/chara/head/chr{_id}/facial/ast_chr{_id}_ear_target"
     ]
 
+def get_head_path1(_id):
+    return [
+        f"3d/chara/head/chr{_id}/pfb_chr{_id}",
+    ]
 
 def get_tail1_path(_id):
     return [
