@@ -42,25 +42,53 @@ def replace_char_head_texture(char_id: str):
 
 
 if __name__ == "__main__":
+    
+    print("当前版本：2025.8.30")
+    print("开源代码：https://github.com/hzyhhzy/umamusume-model-replace")
+    print("")
     while True:
-        
-        do_type = "1" if debug_auto else input("[1] 更换头部模型\n"
-                        "[2] 更换身体模型\n"
-                        "[3] 更换尾巴模型(不建议)\n"
-                        "[4] 更换头部与身体模型\n"
-                        "[5] 修改角色身体贴图\n"
-                        "[6] 更换抽卡开门人物\n"
-                        "[7] 更换技能动画\n"
-                        "[8] 更换G1胜利动作(实验性)\n"
-                        "[9] Live服装解锁\n"
-                        "[10] 清除Live所有模糊效果\n"
-                        "[11] 修改角色头部贴图\n"
-                        "[98] 复原所有修改\n"
-                        "[99] 退出\n"
-                        "请选择您的操作: ")
+        input_instr_str="[1] 更换头部模型\n"\
+                        "[2] 更换身体模型\n"\
+                        "[3] 更换尾巴模型(不建议)\n"\
+                        "[4] 更换头部与身体模型\n"\
+                        "[5] 修改角色身体贴图\n"\
+                        "[6] 更换抽卡开门人物\n"\
+                        "[7] 更换技能动画\n"\
+                        "[8] 更换G1胜利动作(实验性)\n"\
+                        "[9] Live服装解锁\n"\
+                        "[10] 清除Live所有模糊效果\n"\
+                        "[11] 修改角色头部贴图\n"\
+                        "[21] 替换通用服装\n"\
+                        "[98] 复原所有修改\n"\
+                        "[99] 退出\n"\
+                        "请选择您的操作: "
+                        
+        input_instr_str=\
+                        "----------------------------\n"\
+                        "功能列表\n"\
+                        "----------------------------\n"\
+                        "[4] 更换头部与身体模型\n"\
+                        "[21] 替换通用服装\n"\
+                        "[98] 复原所有修改\n"\
+                        "[99] 退出\n"\
+                        "[1] 更换头部模型\n"\
+                        "[2] 更换身体模型\n"\
+                        "----------------------------\n"\
+                        "以下功能年久失修，不保证能用：\n"\
+                        "----------------------------\n"\
+                        "[3] 更换尾巴模型(不建议)\n"\
+                        "[5] 修改角色身体贴图\n"\
+                        "[6] 更换抽卡开门人物\n"\
+                        "[7] 更换技能动画\n"\
+                        "[8] 更换G1胜利动作(实验性)\n"\
+                        "[9] Live服装解锁\n"\
+                        "[10] 清除Live所有模糊效果\n"\
+                        "[11] 修改角色头部贴图\n"\
+                        "请选择您的操作: "
+        do_type = "1" if debug_auto else input(input_instr_str)
 
         if do_type == "1":
-            print("请输入7位数ID, 例: 1046_01")
+            print("请输入7位数ID, 例: 1024_00。（不知道ID就去Umaviewer里找）")
             if(debug_auto):
                 uma.replace_head("1024_00", "9002_00")
             else:
@@ -68,7 +96,7 @@ if __name__ == "__main__":
             print("替换完成")
 
         if do_type == "2":
-            print("请输入7位数ID, 例: 1046_01")
+            print("请输入7位数ID, 例: 1024_00（不知道ID就去Umaviewer里找）")
             if(debug_auto):
                 uma.replace_body("1024_00", "9002_00")
             else:
@@ -85,7 +113,8 @@ if __name__ == "__main__":
             print("替换完成")
 
         if do_type == "4":
-            print("请输入7位数ID, 例: 1046_01")
+            print("请输入7位数ID, 例: 1024_00（不知道ID就去Umaviewer里找）")
+
             inId1 = input("替换ID: ")
             inId2 = input("目标ID: ")
             uma.replace_head(inId1, inId2)
@@ -93,7 +122,7 @@ if __name__ == "__main__":
             print("替换完成")
 
         if do_type == "5":
-            print("请输入7位数ID, 例: 1046_01")
+            print("请输入7位数ID, 例: 1024_00（不知道ID就去Umaviewer里找）")
             replace_char_body_texture(input("角色7位ID: "))
 
         if do_type == "6":
@@ -128,8 +157,14 @@ if __name__ == "__main__":
             #       "Repo: https://github.com/MinamiChiwa/Trainers-Legend-G")
 
         if do_type == "11":
-            print("请输入7位数ID, 例: 1046_01")
+            print("请输入7位数ID, 例: 1024_00")
             replace_char_head_texture(input("角色7位ID: "))
+
+        if do_type == "21":
+            print("请输入7位数ID, 例: 0050_00, 0051_00, 0004_00（泳装）, 0004_01（浴巾）（不知道ID就去Umaviewer里找）")
+            uma.replace_body_generic(input("被替换ID: "), input("目标ID: "))
+
+            print("替换完成")
 
         if do_type == "98":
             uma.file_restore()

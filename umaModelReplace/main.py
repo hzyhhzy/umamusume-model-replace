@@ -18,7 +18,7 @@ EDITED_PATH = f"{spath}/edited"
 class UmaFileNotFoundError(FileNotFoundError):
     pass
 
-def replace_raw1(data: bytes, old: bytes, new: bytes, context: int = 20) -> bytes:
+def replace_raw1(data: bytes, old: bytes, new: bytes, context: int = 20, cab_mapping: dict = None) -> bytes:
     """
     在 data 中将所有 old 替换为 new，并在每次替换时打印上下文。
     
@@ -28,6 +28,7 @@ def replace_raw1(data: bytes, old: bytes, new: bytes, context: int = 20) -> byte
     :param context: 打印时，替换位置前后各保留多少字节上下文
     :return: 完成所有替换后的新字节串
     """
+    #print(data)
 
     any_replaced=False
     result = bytearray()
@@ -63,11 +64,20 @@ def replace_raw1(data: bytes, old: bytes, new: bytes, context: int = 20) -> byte
     if(any_replaced):
         print("replaced")
 
+    # 如果提供了CAB映射，则进行CAB序号替换
+    if cab_mapping:
+        for orig_cab, new_cab in cab_mapping.items():
+            orig_cab_bytes = orig_cab.encode('utf-8')
+            new_cab_bytes = new_cab.encode('utf-8')
+            if orig_cab_bytes in result:
+                result = result.replace(orig_cab_bytes, new_cab_bytes)
+                any_replaced = True
+                #print(f"CAB替换: {orig_cab} -> {new_cab}")
 
     #result=result.replace("chr1024_00/textures/tex_chr1024_00_cheek0".encode("utf8"), "chr9002_00/textures/tex_chr9002_00_cheek0".encode("utf8"))
     return bytes(result),any_replaced
 
-def replace_raw(data: bytes, old:  bytes, new:  bytes, context: int = 20, cab_mapping: dict = None) -> tuple[bytes, bool]:
+def replace_raw(data: bytes, old:  bytes, new:  bytes, context: int = 20, cab_mapping: dict = None) :
     """
     在 data 中匹配特定模式并替换ID，只替换指定的模式，其他地方不变。
     
@@ -82,37 +92,50 @@ def replace_raw(data: bytes, old:  bytes, new:  bytes, context: int = 20, cab_ma
     
     any_replaced = False
     result = data
-    
-    # 定义需要匹配的模式列表
-    patterns = [
-        # 模式1: \x00pfb_bdy{id}\x00
-        b'\x00pfb_bdy' + old + b'\x00',
-        # 模式2: /bdy{id}/pfb_bdy{id}
-        b'/bdy' + old + b'/pfb_bdy' + old,
-        # 未来可以在这里添加更多模式
-        b'/chr' + old + b'/pfb_chr' + old,
-        b'\x00tex_chr' + old + b'_cheek1\x00',
-        b'\x00ast_chr' + old + b'_ear_target\x00',
-        b'\x00ast_chr' + old + b'_facial_target',
-        b'\x00pfb_chr' + old + b'\x00',
-        b'\x00mtl_chr' + old,
-    ]
-    
-    # 对应的替换模式
-    replacements = [
-        # 替换1: \x00pfb_bdy{new_id}\x00
-        b'\x00pfb_bdy' + new + b'\x00',
-        # 替换2: /bdy{new_id}/pfb_bdy{new_id}
-        b'/bdy' + new + b'/pfb_bdy' + new,
-        # 替换3: \x00tex_chr{new_id}_cheek1\x00
-        b'/chr' + new + b'/pfb_chr' + new,
-        b'\x00tex_chr' + new + b'_cheek1\x00',
-        b'\x00ast_chr' + new + b'_ear_target\x00',
-        b'\x00ast_chr' + new + b'_facial_target',
-        b'\x00pfb_chr' + new + b'\x00',
-        b'\x00mtl_chr' + new,
+    # 检查字符串第一位是否为'0'
+    if old[0:1].decode('utf-8') == '0':  # 通用服装
+        # 定义需要匹配的模式列表
+        patterns = [
+            b'bdy' + old ,
+        ]
+        
+        # 对应的替换模式
+        replacements = [
+            
+            b'bdy' + new ,
 
-    ]
+        ]
+    else:
+                # 定义需要匹配的模式列表
+        patterns = [
+            # 模式1: \x00pfb_bdy{id}\x00
+            b'\x00pfb_bdy' + old + b'\x00',
+            # 模式2: /bdy{id}/pfb_bdy{id}
+            b'/bdy' + old + b'/pfb_bdy' + old,
+            # 未来可以在这里添加更多模式
+            b'/chr' + old + b'/pfb_chr' + old,
+            b'\x00tex_chr' + old + b'_cheek1\x00',
+            b'\x00ast_chr' + old + b'_ear_target\x00',
+            b'\x00ast_chr' + old + b'_facial_target',
+            b'\x00pfb_chr' + old + b'\x00',
+            b'\x00mtl_chr' + old,
+        ]
+        
+        # 对应的替换模式
+        replacements = [
+            # 替换1: \x00pfb_bdy{new_id}\x00
+            b'\x00pfb_bdy' + new + b'\x00',
+            # 替换2: /bdy{new_id}/pfb_bdy{new_id}
+            b'/bdy' + new + b'/pfb_bdy' + new,
+            # 替换3: \x00tex_chr{new_id}_cheek1\x00
+            b'/chr' + new + b'/pfb_chr' + new,
+            b'\x00tex_chr' + new + b'_cheek1\x00',
+            b'\x00ast_chr' + new + b'_ear_target\x00',
+            b'\x00ast_chr' + new + b'_facial_target',
+            b'\x00pfb_chr' + new + b'\x00',
+            b'\x00mtl_chr' + new,
+
+        ]
     
     # 逐个处理每个模式
     for pattern, replacement in zip(patterns, replacements):
@@ -251,7 +274,7 @@ class UmaReplace:
             #mapping[orig_main_cab] = new_main_cab
             #print(f"路径 {orig_path} -> {new_path}: CAB映射 {orig_main_cab} -> {new_main_cab}")
             mapping[new_main_cab] = orig_main_cab
-            print(f"CAB映射 {new_main_cab} -> {orig_main_cab}")
+            #print(f"CAB映射 {new_main_cab} -> {orig_main_cab}")
         
         return mapping
 
@@ -429,6 +452,29 @@ class UmaReplace:
         """
         orig_paths = assets_path.get_body_path(id_orig)
         new_paths = assets_path.get_body_path(id_new)
+        
+        # 获取CAB序号映射
+        try:
+            cab_mapping = self.get_cab_mapping(orig_paths, new_paths, id_orig, id_new)
+            #print(f"Body替换CAB映射: {cab_mapping}")
+        except Exception as e:
+            print(f"获取Body CAB映射失败: {e}")
+        
+        for i in range(len(orig_paths)):
+            try:
+                self.replace_file_ids(orig_paths[i], new_paths[i], id_orig, id_new, cab_mapping)
+            except UmaFileNotFoundError as e:
+                print(e)
+
+    def replace_body_generic(self, id_orig: str, id_new: str):
+        """
+        替换身体
+        :param id_orig: 原id, 例: 1046_01
+        :param id_new: 新id
+        """
+        orig_paths = assets_path.get_body_path_generic(id_orig)
+        new_paths = assets_path.get_body_path_generic(id_new)
+
         
         # 获取CAB序号映射
         try:
@@ -759,10 +805,20 @@ class UmaReplace:
         print("done.")
 
 if __name__ == '__main__':
+    assert False,"不要直接运行这个文件，运行上层目录的main.py"
     # 测试代码，仅在直接运行此文件时执行
     a = UmaReplace()
     a.file_restore()
-    for i in range(1001, 1135):
-        a.replace_body(f"{i}_00", "9002_00")
-        a.replace_head(f"{i}_00", "9002_00")
+    a.replace_body_generic(f"0050_00", "0004_01")
+    a.replace_body_generic(f"0051_00", "0004_00")
+
+    #a.replace_head(f"1014_00", "1062_00")
+    #a.replace_body(f"1014_00", "1062_00")
+
+    #a.replace_head(f"1029_00", "1135_00")
+    #a.replace_head(f"{i}_00", "1135_00")
+    target="9002_00"
+    for i in range(1001, 1040):
+        a.replace_head(f"{i}_00", target)
+        a.replace_body(f"{i}_00", target)
     pass

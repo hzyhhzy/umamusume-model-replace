@@ -5,11 +5,11 @@
 
 # 使用方法
 
-- 安装`Python3.8及以上版本`
+- 安装`Python3.12及以上版本`
 - 安装依赖: `pip install -r requirements.txt`
 
 ```
-UnityPy~=1.8.15
+pip install UnityPy
 ```
 
 - 运行`main.py`
